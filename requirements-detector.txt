@@ -1,0 +1,13 @@
+torch>=2.1
+transformers>=4.40
+sentencepiece
+faiss-cpu
+rank-bm25
+langchain
+langchain-community
+sentence-transformers
+wikipedia-api
+networkx
+python-louvain
+nltk
+rouge-score
