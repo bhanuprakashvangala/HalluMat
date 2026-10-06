@@ -76,11 +76,14 @@ in `data/`, then run `detector/generate_responses.py` followed by `detector/labe
 ## Citation
 
 ```bibtex
-@inproceedings{vangala2025hallumat,
-  title     = {HalluMat: Detecting Hallucinations in LLM-Generated Materials Science Content Through Multi-Stage Verification},
-  author    = {Vangala, Bhanu Prakash and Mahmud, Sajid and Neupane, Pawan and Selvaraj, Joel and Cheng, Jianlin},
-  booktitle = {AAAI 2025 Spring Symposium on AI for Engineering and Scientific Discoveries},
-  year      = {2025}
+@misc{vangala2025hallumatdetectinghallucinationsllmgenerated,
+      title={HalluMat: Detecting Hallucinations in LLM-Generated Materials Science Content Through Multi-Stage Verification},
+      author={Bhanu Prakash Vangala and Sajid Mahmud and Pawan Neupane and Joel Selvaraj and Jianlin Cheng},
+      year={2025},
+      eprint={2512.22396},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2512.22396},
 }
 ```
 

@@ -15,11 +15,8 @@ authors:
   - family-names: Cheng
     given-names: Jianlin
 preferred-citation:
-  type: conference-paper
+  type: article
   title: "HalluMat: Detecting Hallucinations in LLM-Generated Materials Science Content Through Multi-Stage Verification"
-  collection-title: "AAAI 2025 Spring Symposium on AI for Engineering and Scientific Discoveries"
-  year: 2025
-  url: "https://arxiv.org/abs/2512.22396"
   authors:
     - family-names: Vangala
       given-names: Bhanu Prakash
@@ -31,3 +28,7 @@ preferred-citation:
       given-names: Joel
     - family-names: Cheng
       given-names: Jianlin
+  journal: "arXiv preprint arXiv:2512.22396"
+  year: 2025
+  doi: "10.48550/arXiv.2512.22396"
+  url: "https://arxiv.org/abs/2512.22396"
