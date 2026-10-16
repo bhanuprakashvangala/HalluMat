@@ -72,7 +72,7 @@ jobs:
           diff tests/golden/reproduce_stdout.txt "$RUNNER_TEMP/stdout.txt"
           cmp results/agreement_metrics.csv "$RUNNER_TEMP/reproduce/agreement_metrics.csv"
       - name: The figures match the committed ones byte for byte
-        run: tr -d '' < tests/golden/figures.sha256 | (cd "$RUNNER_TEMP/reproduce" && sha256sum --check)
+        run: tr -d '\r' < tests/golden/figures.sha256 | (cd "$RUNNER_TEMP/reproduce" && sha256sum --check)
       - run: pytest tests/unit/test_import_hygiene.py tests/integration
 
   build:
