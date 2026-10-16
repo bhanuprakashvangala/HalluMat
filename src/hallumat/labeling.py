@@ -19,7 +19,7 @@ from hallumat.errors import DatasetError
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL: Final = "bert-base-uncased"
+DEFAULT_MODEL: Final = "google-bert/bert-base-uncased"
 LOW_ABOVE: Final = 0.8
 """Similarity above this is Low hallucination."""
 MEDIUM_FROM: Final = 0.5

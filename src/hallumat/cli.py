@@ -233,7 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     label = commands.add_parser("label", help="label responses by BERT similarity to the reference answer")
     label.add_argument("--responses", type=Path, required=True, help="CSV with Generated_Response, Original_Answer")
     label.add_argument("--out", type=Path, required=True, help="CSV to write")
-    label.add_argument("--model", default="bert-base-uncased")
+    label.add_argument("--model", default="google-bert/bert-base-uncased")
     label.set_defaults(handler=_label)
 
     detect = commands.add_parser("detect", help="run HalluMatDetector on a query")
