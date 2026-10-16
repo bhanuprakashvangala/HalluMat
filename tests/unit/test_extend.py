@@ -315,3 +315,90 @@ def test_pipeline_end_to_end(tmp_path: Path):
     assert qs["phrasings"].map(len).eq(5).all()
     assert (out / "summary.csv").read_text(encoding="utf-8").startswith("model,source,Low,Medium,High,answers")
     assert stages.seed_of("x") == stages.seed_of("x")
+
+
+class FakeAPI:
+    """Replies in order from a list of (status, body, headers); records the payloads."""
+
+    def __init__(self, replies):
+        self.replies, self.payloads = list(replies), []
+
+    def post(self, url, json, headers, timeout):
+        self.payloads.append(json)
+        status, body, extra = self.replies.pop(0)
+
+        class Reply:
+            status_code, text = status, str(body)
+            headers = extra
+
+            @staticmethod
+            def json():
+                return body
+
+        return Reply
+
+
+def ok(text):
+    return (200, {"choices": [{"message": {"content": text}}]}, {})
+
+
+def test_api_backend_sends_seeded_requests_and_strips_reasoning(monkeypatch: pytest.MonkeyPatch):
+    from hallumat.extend import llm
+
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    session = FakeAPI([ok("<think>x</think>A"), ok("B")])
+    backend = llm.APIBackend("qwen3", api_key="k", concurrency=1, session=session,
+                             chat_template_kwargs={"enable_thinking": False})  # fmt: skip
+    replies = backend.chat([[{"role": "user", "content": "1"}], [{"role": "user", "content": "2"}]], Sampling(), [5, 6])
+    assert replies == ["A", "B"]
+    assert [p["seed"] for p in session.payloads] == [5, 6]
+    assert session.payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_api_backend_waits_out_rate_limits(monkeypatch: pytest.MonkeyPatch):
+    from hallumat.extend import llm
+
+    pauses = []
+    monkeypatch.setattr(llm.time, "sleep", pauses.append)
+    session = FakeAPI([(429, {}, {"x-ratelimit-reset": "12"}), (503, {}, {}), ok("done")])
+    assert llm.APIBackend("m", api_key="k", session=session)._one([], Sampling(), 0) == "done"
+    assert pauses == [13.0, 10.0]
+
+
+def test_api_backend_fails_fast_on_a_bad_token(monkeypatch: pytest.MonkeyPatch):
+    from hallumat.extend import llm
+
+    session = FakeAPI([(401, {"error": "invalid token"}, {})])
+    with pytest.raises(RuntimeError, match="HTTP 401"):
+        llm.APIBackend("m", api_key="k", session=session)._one([], Sampling(), 0)
+
+
+def test_nrp_key_from_env_or_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from hallumat.extend.llm import nrp_key
+
+    monkeypatch.setenv("NRP_KEY", "env-key")
+    assert nrp_key() == "env-key"
+    monkeypatch.delenv("NRP_KEY")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    with pytest.raises(Exception, match="no NRP LLM token"):
+        nrp_key()
+
+
+def test_job_renderer_api_mode_runs_on_cpu():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("job", Path(__file__).parents[2] / "deploy" / "nautilus" / "job.py")
+    job = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(job)
+    manifest = job.render(job.argparse.Namespace(
+        stage="paraphrase", ref="abc", model=None, shard="1/3", tensor_parallel=2, writer=None, gpu_products=None,
+        engine="api", concurrency=8, name_suffix="", passthrough=[],
+    ))  # fmt: skip
+    pod = manifest["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+    assert "nvidia.com/gpu" not in container["resources"]["limits"]
+    assert container["resources"]["limits"] == container["resources"]["requests"]
+    assert "--engine api --concurrency 8" in container["command"][2]
+    assert any(e["name"] == "NRP_KEY" for e in container["env"])
+    assert manifest["metadata"]["name"] == "bhanu-hallumat-paraphrase-1of3"

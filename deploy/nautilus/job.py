@@ -27,12 +27,13 @@ STAGES = {
     "fetch-mp": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 2),
     "fetch-wiki": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 8),
     "mp-questions": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 1),
-    "wiki-questions": (VLLM_IMAGE, 2, GPU_48GB, 8, "64Gi", "", 12),
+    "wiki-questions": (VLLM_IMAGE, 2, GPU_48GB, 4, "48Gi", "", 12),
     "select": (VLLM_IMAGE, 0, [], 8, "16Gi", "sentence-transformers faiss-cpu", 3),
-    "paraphrase": (VLLM_IMAGE, 2, GPU_48GB, 8, "64Gi", "", 12),
-    "respond": (VLLM_IMAGE, 1, GPU_24GB, 6, "40Gi", "", 12),
+    "paraphrase": (VLLM_IMAGE, 2, GPU_48GB, 4, "48Gi", "", 12),
+    "respond": (VLLM_IMAGE, 1, GPU_24GB, 6, "40Gi", "", 24),
     "label": (VLLM_IMAGE, 1, GPU_24GB, 6, "32Gi", "", 8),
     "export": (CPU_IMAGE, 0, [], 4, "32Gi", "pyarrow huggingface_hub", 3),
+    "publish": (CPU_IMAGE, 0, [], 2, "8Gi", "huggingface_hub", 3),
 }
 # Gemma-3-12B needs 24 GB of weights in bf16, so a 48 GB card.
 MODEL_GPUS = {"gemma3-12b": GPU_48GB}
@@ -40,10 +41,18 @@ MODEL_GPUS = {"gemma3-12b": GPU_48GB}
 
 def render(args: argparse.Namespace) -> dict[str, object]:
     image, gpus, products, cpu, memory, extra, hours = STAGES[args.stage]
-    products = MODEL_GPUS.get(args.model or "", products)
-    if args.stage in ("wiki-questions", "paraphrase"):
-        gpus = args.tensor_parallel
+    api = args.engine == "api" and args.stage in ("wiki-questions", "paraphrase", "respond")
+    if api:
+        # The model runs on the NRP managed LLM service: this Job only sends requests.
+        image, gpus, products, cpu, memory, extra = CPU_IMAGE, 0, [], 2, "4Gi", "requests pyarrow"
+    products = args.gpu_products or MODEL_GPUS.get(args.model or "", products)
     hallumat_args = ["--work", "/work", *args.passthrough]
+    if api:
+        hallumat_args += ["--engine", "api", "--concurrency", str(args.concurrency)]
+    if args.stage in ("wiki-questions", "paraphrase") and not api:
+        gpus = args.tensor_parallel
+    if args.stage in ("wiki-questions", "paraphrase") and args.writer:
+        hallumat_args += ["--writer", args.writer]
     if args.model:
         hallumat_args += ["--model", args.model]
     if args.shard:
@@ -73,6 +82,8 @@ def render(args: argparse.Namespace) -> dict[str, object]:
         {"name": "PYTHONUNBUFFERED", "value": "1"},
         {"name": "HF_TOKEN", "valueFrom": {"secretKeyRef": {"name": "bhanu-pickspin-hf", "key": "HF_TOKEN"}}},
     ]
+    if api:
+        env.append({"name": "NRP_KEY", "valueFrom": {"secretKeyRef": {"name": "bhanu-hallumat-nrp", "key": "NRP_KEY"}}})
     if args.stage == "fetch-mp":
         env.append(
             {"name": "MP_API_KEY", "valueFrom": {"secretKeyRef": {"name": "bhanu-hallumat-mp", "key": "MP_API_KEY"}}}
@@ -134,6 +145,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model")
     parser.add_argument("--shard", help="INDEX/COUNT")
     parser.add_argument("--tensor-parallel", type=int, default=2, help="GPUs for the writer model")
+    parser.add_argument("--writer", help="writer model (wiki-questions, paraphrase)")
+    parser.add_argument("--engine", choices=["vllm", "api"], default="vllm", help="api: use the NRP managed LLMs")
+    parser.add_argument("--concurrency", type=int, default=12, help="parallel requests (api engine)")
+    parser.add_argument(
+        "--gpu-products",
+        type=lambda text: [p for p in text.split(",") if p],
+        help="comma-separated nvidia.com/gpu.product values (default: by stage and model)",
+    )
     parser.add_argument("--name-suffix", default="", help="appended to the Job name, e.g. -2 for a rerun")
     parser.add_argument("passthrough", nargs="*", help="extra arguments for `hallumat extend` (after --)")
     args = parser.parse_args(argv)

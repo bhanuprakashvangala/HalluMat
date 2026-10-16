@@ -1,0 +1,74 @@
+# The unattended runner of the dataset extension (orchestrate.py) and the permissions it needs to create and
+# watch the stage Jobs. CPU only. Start it with the commit to run:
+#     sed "s/REF_PLACEHOLDER/<commit>/" deploy/nautilus/orchestrator.yaml | kubectl apply -f -
+# Progress: kubectl logs -f job/bhanu-hallumat-orchestrator, and /work/status.json on bhanu-hallumat-work.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bhanu-hallumat-orchestrator
+  namespace: gp-engine-mizzou-radiant
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bhanu-hallumat-orchestrator
+  namespace: gp-engine-mizzou-radiant
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch]
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bhanu-hallumat-orchestrator
+  namespace: gp-engine-mizzou-radiant
+subjects:
+  - kind: ServiceAccount
+    name: bhanu-hallumat-orchestrator
+    namespace: gp-engine-mizzou-radiant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bhanu-hallumat-orchestrator
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bhanu-hallumat-orchestrator
+  namespace: gp-engine-mizzou-radiant
+  labels: {app: bhanu-hallumat}
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 604800
+  template:
+    metadata:
+      labels: {app: bhanu-hallumat}
+    spec:
+      serviceAccountName: bhanu-hallumat-orchestrator
+      restartPolicy: OnFailure
+      nodeSelector: {kubernetes.io/arch: amd64}
+      containers:
+        - name: orchestrate
+          image: python:3.12-slim
+          command: [bash, -c]
+          args:
+            - |
+              set -e
+              apt-get update -qq && apt-get install -y -qq git >/dev/null
+              git clone -q https://github.com/bhanuprakashvangala/HalluMat /src && cd /src && git checkout -q REF_PLACEHOLDER
+              pip install -q kubernetes
+              python deploy/nautilus/orchestrate.py --ref REF_PLACEHOLDER
+          env:
+            - {name: PYTHONUNBUFFERED, value: "1"}
+          resources:
+            requests: {cpu: "500m", memory: 1Gi}
+            limits: {cpu: "500m", memory: 1Gi}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      volumes:
+        - name: work
+          persistentVolumeClaim: {claimName: bhanu-hallumat-work}

@@ -34,6 +34,7 @@ QUESTION_COLUMNS = [
     "short_answer",
     "source_id",
     "source_url",
+    "writer",
 ]
 RESPONSE_COLUMNS = [
     "id",
@@ -57,8 +58,9 @@ def question_table(work: Path) -> pd.DataFrame:
     grouped = phrasings.sort_values(["question_id", "phrasing"]).groupby("question_id")["text"].agg(list)
     questions["phrasings"] = questions["question_id"].map(grouped)
     questions = questions[questions["phrasings"].map(lambda p: isinstance(p, list) and len(p) == 5)]
-    if "short_answer" not in questions:
-        questions["short_answer"] = None
+    for column in ("short_answer", "writer"):
+        if column not in questions:
+            questions[column] = None
     return questions[QUESTION_COLUMNS].sort_values("question_id").reset_index(drop=True)
 
 

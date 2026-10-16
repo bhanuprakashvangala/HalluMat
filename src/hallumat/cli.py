@@ -159,9 +159,16 @@ def _extend(args: argparse.Namespace) -> int:
     elif stage in ("wiki-questions", "paraphrase", "respond"):
         from hallumat.extend.llm import make_backend
 
-        model = stages.RESPONDERS[args.model] if stage == "respond" else (args.writer or stages.WRITER)
+        if stage == "respond":
+            model = stages.RESPONDERS[args.model]
+        else:
+            model = args.writer or (stages.API_WRITER if args.engine == "api" else stages.WRITER)
         options: dict[str, object] = {"max_model_len": args.max_model_len}
-        if args.engine == "vllm":
+        if args.engine == "api":
+            options = {"concurrency": args.concurrency}
+            if stage != "respond" and not args.writer:
+                options["chat_template_kwargs"] = stages.API_WRITER_TEMPLATE_KWARGS
+        elif args.engine == "vllm":
             options["tensor_parallel_size"] = args.tensor_parallel
             if stage == "respond" and args.model in stages.CHAT_TEMPLATE_KWARGS:
                 options["chat_template_kwargs"] = stages.CHAT_TEMPLATE_KWARGS[args.model]
@@ -178,10 +185,27 @@ def _extend(args: argparse.Namespace) -> int:
 
         embedder = BatchBertEmbedder(batch_size=args.batch_size)
         count = sum(stages.label(work, model, embedder.embed_many) for model in args.models)
-    else:  # export
+    elif stage == "export":
         from hallumat.extend.export import export
 
         count = export(work, args.out or work / "export")
+    else:  # publish
+        from huggingface_hub import HfApi
+
+        folder = args.out or work / "export"
+        if not (folder / "questions.parquet").is_file():
+            raise HallumatError(f"nothing to publish in {folder}: run the export stage first")
+        info = HfApi().upload_folder(
+            repo_id=args.repo,
+            repo_type="dataset",
+            folder_path=str(folder),
+            path_in_repo="extended",
+            allow_patterns=["*.parquet", "*.csv"],
+            commit_message="Add the extended HalluMat data",
+            create_pr=True,
+        )
+        print(f"opened {info.pr_url}", file=sys.stderr)
+        count = len(list(folder.rglob("*.parquet")))
     print(f"{stage}: {count} records", file=sys.stderr)
     return 0
 
@@ -262,13 +286,20 @@ def build_parser() -> argparse.ArgumentParser:
             "respond",
             "label",
             "export",
+            "publish",
         ],
     )
     extend.add_argument("--work", type=Path, required=True, help="work directory shared by the stages")
     extend.add_argument("--model", choices=sorted(RESPONDERS), help="answering model (respond)")
     extend.add_argument("--models", nargs="+", default=sorted(RESPONDERS), help="models to label (label)")
     extend.add_argument("--writer", help="model that writes questions and paraphrases (default Qwen2.5-32B AWQ)")
-    extend.add_argument("--engine", choices=["vllm", "transformers"], default="vllm")
+    extend.add_argument(
+        "--engine",
+        choices=["vllm", "api", "transformers"],
+        default="vllm",
+        help="vllm on a local GPU, api for an OpenAI-compatible endpoint (NRP managed LLMs), or transformers",
+    )
+    extend.add_argument("--concurrency", type=int, default=12, help="parallel requests (api engine)")
     extend.add_argument("--max-model-len", type=int, default=4096)
     extend.add_argument("--tensor-parallel", type=int, default=1, help="GPUs per model (vLLM)")
     extend.add_argument("--shard", type=_shard, default=(0, 1), metavar="INDEX/COUNT", help="split a stage across jobs")
@@ -277,6 +308,11 @@ def build_parser() -> argparse.ArgumentParser:
     extend.add_argument("--limit", type=int, help="fetch at most this many documents (fetch-mp, fetch-wiki)")
     extend.add_argument("--batch-size", type=int, default=64, help="BERT batch size (label)")
     extend.add_argument("--out", type=Path, help="export directory (default <work>/export)")
+    extend.add_argument(
+        "--repo",
+        default="bhanuprakashvangala/HalluMat",
+        help="Hugging Face dataset that receives the export as a pull request (publish)",
+    )
     extend.set_defaults(handler=_extend)
     return parser
 

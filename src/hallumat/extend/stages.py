@@ -37,7 +37,11 @@ CHAT_TEMPLATE_KWARGS: Final = {"qwen3-8b": {"enable_thinking": False}}
 """Chat-template options per answering model: Qwen3 answers directly, without a reasoning trace."""
 
 WRITER: Final = "Qwen/Qwen2.5-72B-Instruct-AWQ"
-"""Model that writes the Wikipedia questions and the paraphrases (two 48 GB GPUs)."""
+"""Model that writes the Wikipedia questions and the paraphrases with vLLM (two 48 GB GPUs)."""
+
+API_WRITER: Final = "qwen3"
+"""The writer on the NRP managed LLM service (`--engine api`), answering without a reasoning trace."""
+API_WRITER_TEMPLATE_KWARGS: Final = {"enable_thinking": False}
 
 ANSWER_SAMPLING: Final = Sampling(temperature=0.7, top_p=0.9, max_tokens=256)
 WRITER_SAMPLING: Final = Sampling(temperature=0.7, top_p=0.9, max_tokens=1024)
@@ -86,7 +90,12 @@ def wiki_questions(
             [questions.conversation(p) for p in batch], WRITER_SAMPLING, [seed_of(p["id"]) for p in batch]
         )
         written += append_jsonl(
-            out, (q for p, r in zip(batch, replies, strict=True) for q in questions.parse_questions(r, p))
+            out,
+            (
+                {**q, "writer": backend.name}
+                for p, r in zip(batch, replies, strict=True)
+                for q in questions.parse_questions(r, p)
+            ),
         )
         append_jsonl(seen_file, ({"id": p["id"]} for p in batch))
         log.info(
@@ -154,7 +163,7 @@ def paraphrase_questions(
                 if rewordings is None:
                     retry.append(q)
                 else:
-                    append_jsonl(out, paraphrase.phrasings(q, rewordings))
+                    append_jsonl(out, ({**row, "writer": backend.name} for row in paraphrase.phrasings(q, rewordings)))
             pending = retry
         append_jsonl(failed_file, ({"id": q["id"]} for q in pending))
         log.info("paraphrase: %d questions left", len(todo) - len(done_ids(out, "question_id")) + len(done))
