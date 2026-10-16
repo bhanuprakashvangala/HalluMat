@@ -72,7 +72,8 @@ Differences from the paper:
 - The original CSV had 6 more rows with an empty question and response, which the paper counted as High (2,346).
   They are removed here, so High is 2,340.
 - Table 2 in the paper lists 0-based group indices, so paper group 423 is `Group_ID` 424 in the data. The PHCS scores match.
-  Many groups tie at 0.5477, so the last rows of that table depend on sort order.
+  Many groups tie at 0.5477, so the last rows of that table depend on how ties are broken; `hallumat` takes them in
+  `Group_ID` order.
 
 ## Run HalluMatDetector
 

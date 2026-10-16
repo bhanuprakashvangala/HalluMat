@@ -46,7 +46,7 @@ def test_table_one_and_table_two(reproduced: tuple[Path, str]):
         "Total Paraphrased Queries   3269",
         "Medium Hallucination Responses    872",
         "F-statistic: 10.0936, p-value: 0.000000",
-        "T-statistic: -4.8736, p-value: 0.000009",
+        "T-statistic: -1.5946, p-value: 0.114987",
         "|        424 |     1.09545  |",
     ]:
         assert line in stdout

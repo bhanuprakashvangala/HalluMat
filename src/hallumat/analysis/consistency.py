@@ -61,17 +61,24 @@ def phcs_scores(levels: pd.DataFrame) -> pd.DataFrame:
 
 
 def most_inconsistent(scores: pd.DataFrame, n: int = TOP_N) -> pd.DataFrame:
-    """The n groups with the highest PHCS (Table 2). Ties keep pandas' default sort order."""
-    return scores.sort_values(by="PHCS_Score", ascending=False).head(n)
+    """The n groups with the highest PHCS (Table 2); equal scores are taken in Group_ID order.
+
+    Many groups share a score (461 at 0 and 134 at 0.5477 in the released data). numpy's default sort is not
+    stable and orders ties differently across platforms, so the tie-break is explicit.
+    """
+    return scores.sort_values(by=["PHCS_Score", "Group_ID"], ascending=[False, True], kind="stable").head(n)
 
 
 def least_inconsistent(scores: pd.DataFrame, n: int = TOP_N) -> pd.DataFrame:
-    """The n groups with the lowest PHCS."""
-    return scores.sort_values(by="PHCS_Score", ascending=True).head(n)
+    """The n groups with the lowest PHCS; equal scores are taken in Group_ID order."""
+    return scores.sort_values(by=["PHCS_Score", "Group_ID"], ascending=[True, True], kind="stable").head(n)
 
 
 def variability_t_test(levels: pd.DataFrame, scores: pd.DataFrame, n: int = TOP_N) -> TestResult:
-    """Welch t-test of the levels in the n most against the n least inconsistent groups."""
+    """Welch t-test of the levels in the n most against the n least inconsistent groups.
+
+    With many tied scores the result depends on which tied groups are chosen; see most_inconsistent.
+    """
     high = most_inconsistent(scores, n)["Group_ID"]
     low = least_inconsistent(scores, n)["Group_ID"]
     result = ttest_ind(

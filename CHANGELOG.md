@@ -43,3 +43,8 @@ tests and CI. The dataset analysis gives the same numbers: `hallumat reproduce` 
 - `agreement_metrics.py` printed the dataset's column names before the metrics; `hallumat agreement` prints only the
   metrics.
 - `results/agreement_metrics.csv` has LF line ends on every platform.
+- Groups with equal PHCS are ranked in `Group_ID` order. The 1.x scripts used numpy's default sort, which is not
+  stable and orders ties differently on different platforms, so the last rows of Table 2 and the Welch t-test (which
+  picks the 10 least inconsistent of the 461 groups tied at 0) changed from machine to machine: on Windows the t-test
+  gave t = -4.8736, p = 0.000009 and on Linux t = -6.0023, p < 0.000001. With the fixed order it is t = -1.5946,
+  p = 0.114987 everywhere. The paper reports neither test.
