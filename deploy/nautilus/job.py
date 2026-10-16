@@ -23,6 +23,7 @@ GPU_24GB = ["NVIDIA-GeForce-RTX-3090", "NVIDIA-A10", "NVIDIA-GeForce-RTX-4090", 
 
 # stage: (image, gpus, gpu products, cpu, memory, extra pip packages, deadline hours)
 STAGES = {
+    "download": (CPU_IMAGE, 0, [], 4, "8Gi", "huggingface_hub hf_transfer", 6),
     "fetch-mp": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 2),
     "fetch-wiki": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 8),
     "mp-questions": (CPU_IMAGE, 0, [], 2, "8Gi", "requests pyarrow", 1),

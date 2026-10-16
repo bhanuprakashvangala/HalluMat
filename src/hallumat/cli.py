@@ -135,6 +135,19 @@ def _extend(args: argparse.Namespace) -> int:
         count = write_jsonl(
             work / "wiki_passages.jsonl", (p for article in articles for p in wikipedia.passages(article))
         )
+    elif stage == "download":
+        from huggingface_hub import snapshot_download
+
+        patterns = ["*.json", "*.safetensors", "*.model", "*.txt", "tokenizer*", "*.jinja"]
+        for model in [
+            stages.WRITER,
+            *stages.RESPONDERS.values(),
+            "sentence-transformers/all-MiniLM-L6-v2",
+            "bert-base-uncased",
+        ]:
+            log.info("downloading %s", model)
+            snapshot_download(model, allow_patterns=patterns)
+        count = len(stages.RESPONDERS) + 3
     elif stage == "mp-questions":
         count = stages.mp_questions(work)
     elif stage == "select":
@@ -239,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     extend.add_argument(
         "stage",
         choices=[
+            "download",
             "fetch-mp",
             "fetch-wiki",
             "mp-questions",
