@@ -112,6 +112,73 @@ def _detect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extend(args: argparse.Namespace) -> int:
+    """The dataset-extension stages; see hallumat.extend."""
+    from hallumat.extend import stages
+    from hallumat.extend.records import write_jsonl
+
+    work: Path = args.work
+    stage = args.stage
+    if stage == "respond" and not args.model:
+        raise HallumatError("respond needs --model")
+    work.mkdir(parents=True, exist_ok=True)
+    if stage == "fetch-mp":
+        from hallumat.extend.materials_project import api_key, fetch_materials
+
+        count = write_jsonl(work / "mp_materials.jsonl", fetch_materials(api_key(), limit=args.limit))
+    elif stage == "fetch-wiki":
+        from hallumat.extend import wikipedia
+
+        client = wikipedia.WikiClient()
+        titles = wikipedia.crawl_categories(client, depth=args.depth)
+        articles = wikipedia.fetch_leads(client, titles[: args.limit] if args.limit else titles)
+        count = write_jsonl(
+            work / "wiki_passages.jsonl", (p for article in articles for p in wikipedia.passages(article))
+        )
+    elif stage == "mp-questions":
+        count = stages.mp_questions(work)
+    elif stage == "select":
+        from hallumat.detector.models import SentenceEmbedder
+
+        count = stages.select_questions(
+            work, lambda: SentenceEmbedder("sentence-transformers/all-MiniLM-L6-v2"), total=args.total
+        )
+    elif stage in ("wiki-questions", "paraphrase", "respond"):
+        from hallumat.extend.llm import make_backend
+
+        model = stages.RESPONDERS[args.model] if stage == "respond" else (args.writer or stages.WRITER)
+        backend = make_backend(model, engine=args.engine, max_model_len=args.max_model_len)
+        shard_index, shard_count = args.shard
+        if stage == "wiki-questions":
+            count = stages.wiki_questions(work, backend, shard_index=shard_index, shard_count=shard_count)
+        elif stage == "paraphrase":
+            count = stages.paraphrase_questions(work, backend, shard_index=shard_index, shard_count=shard_count)
+        else:
+            count = stages.respond(work, args.model, backend, shard_index=shard_index, shard_count=shard_count)
+    elif stage == "label":
+        from hallumat.extend.labels import BatchBertEmbedder
+
+        embedder = BatchBertEmbedder(batch_size=args.batch_size)
+        count = sum(stages.label(work, model, embedder.embed_many) for model in args.models)
+    else:  # export
+        from hallumat.extend.export import export
+
+        count = export(work, args.out or work / "export")
+    print(f"{stage}: {count} records", file=sys.stderr)
+    return 0
+
+
+def _shard(text: str) -> tuple[int, int]:
+    index, _, count = text.partition("/")
+    try:
+        parsed = int(index), int(count)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected INDEX/COUNT, e.g. 0/4") from None
+    if not 0 <= parsed[0] < parsed[1]:
+        raise argparse.ArgumentTypeError("INDEX must be between 0 and COUNT - 1")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hallumat", description="HalluMat dataset analysis and the HalluMatDetector hallucination detector."
@@ -160,6 +227,37 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-wikipedia-lookups", type=int, help="look up at most this many query chunks on Wikipedia (default: all)"
     )
     detect.set_defaults(handler=_detect)
+
+    from hallumat.extend.stages import RESPONDERS
+
+    extend = commands.add_parser("extend", help="build the extended dataset (see hallumat.extend)")
+    extend.add_argument(
+        "stage",
+        choices=[
+            "fetch-mp",
+            "fetch-wiki",
+            "mp-questions",
+            "wiki-questions",
+            "select",
+            "paraphrase",
+            "respond",
+            "label",
+            "export",
+        ],
+    )
+    extend.add_argument("--work", type=Path, required=True, help="work directory shared by the stages")
+    extend.add_argument("--model", choices=sorted(RESPONDERS), help="answering model (respond)")
+    extend.add_argument("--models", nargs="+", default=sorted(RESPONDERS), help="models to label (label)")
+    extend.add_argument("--writer", help="model that writes questions and paraphrases (default Qwen2.5-32B AWQ)")
+    extend.add_argument("--engine", choices=["vllm", "transformers"], default="vllm")
+    extend.add_argument("--max-model-len", type=int, default=4096)
+    extend.add_argument("--shard", type=_shard, default=(0, 1), metavar="INDEX/COUNT", help="split a stage across jobs")
+    extend.add_argument("--total", type=int, default=50_000, help="questions to select (select)")
+    extend.add_argument("--depth", type=int, default=2, help="category depth (fetch-wiki)")
+    extend.add_argument("--limit", type=int, help="fetch at most this many documents (fetch-mp, fetch-wiki)")
+    extend.add_argument("--batch-size", type=int, default=64, help="BERT batch size (label)")
+    extend.add_argument("--out", type=Path, help="export directory (default <work>/export)")
+    extend.set_defaults(handler=_extend)
     return parser
 
 

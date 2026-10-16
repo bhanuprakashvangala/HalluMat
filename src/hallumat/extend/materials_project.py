@@ -177,7 +177,9 @@ def _magnetism(doc: Record, f: str) -> Fact | None:
     moment = doc.get("total_magnetization")
     if name in ("ferromagnetic", "ferrimagnetic") and moment:
         answer = f"{f} is predicted to be {name}, with a total magnetization of {moment:.2f} μB per formula unit."
-    return Fact("magnetic_ordering", f"Is {f} magnetic, and if so, what kind of magnetic ordering does it have?", answer)
+    return Fact(
+        "magnetic_ordering", f"Is {f} magnetic, and if so, what kind of magnetic ordering does it have?", answer
+    )
 
 
 def _bulk_modulus(doc: Record, f: str) -> Fact | None:
@@ -218,6 +220,7 @@ def make_questions(materials: Sequence[Record]) -> list[Record]:
                 "source_id": str(doc["material_id"]),
                 "source_url": MATERIAL_URL.format(doc["material_id"]),
                 "keep_terms": [formula],
+                "n_elements": doc.get("nelements"),
             }
         )
     return questions

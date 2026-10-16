@@ -105,7 +105,9 @@ def crawl_categories(client: WikiClient, roots: Sequence[str] = ROOT_CATEGORIES,
         if category in seen_categories:
             continue
         seen_categories.add(category)
-        for data in client.query(list="categorymembers", cmtitle=f"Category:{category}", cmlimit=500, cmtype="page|subcat"):
+        for data in client.query(
+            list="categorymembers", cmtitle=f"Category:{category}", cmlimit=500, cmtype="page|subcat"
+        ):
             for member in data.get("query", {}).get("categorymembers", []):
                 title = member["title"]
                 if member["ns"] == 14:

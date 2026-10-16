@@ -29,7 +29,9 @@ def drop_exact_duplicates(candidates: Sequence[Record]) -> list[Record]:
     return unique
 
 
-def drop_near_duplicates(candidates: Sequence[Record], embedder: Embedder, threshold: float = NEAR_DUPLICATE) -> list[Record]:
+def drop_near_duplicates(
+    candidates: Sequence[Record], embedder: Embedder, threshold: float = NEAR_DUPLICATE
+) -> list[Record]:
     """Keep a question unless an earlier kept question is more similar than threshold (inner product of
     normalised embeddings, searched with FAISS)."""
     if not candidates:
@@ -53,7 +55,8 @@ def drop_near_duplicates(candidates: Sequence[Record], embedder: Embedder, thres
 
 def choose(mp: Sequence[Record], wiki: Sequence[Record], total: int, seed: int = 0) -> list[Record]:
     """total questions, half from each source when both have enough; the shortfall of one comes from the other.
-    Materials Project questions are sampled evenly across properties."""
+    Materials Project questions are taken evenly across properties and, within a property, simpler compounds
+    (fewer elements) first, in random order among equals."""
     rng = random.Random(seed)
     wiki_pool = list(wiki)
     rng.shuffle(wiki_pool)
@@ -62,6 +65,8 @@ def choose(mp: Sequence[Record], wiki: Sequence[Record], total: int, seed: int =
         by_topic.setdefault(record["topic"], []).append(record)
     for pool in by_topic.values():
         rng.shuffle(pool)
+        # pop() takes from the end: most elements first in the list, so the simplest compounds are taken first.
+        pool.sort(key=lambda r: r.get("n_elements") or 9, reverse=True)
     mp_pool = []
     while any(by_topic.values()):
         for topic in sorted(by_topic):

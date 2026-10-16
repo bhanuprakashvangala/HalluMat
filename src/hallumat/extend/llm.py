@@ -28,12 +28,23 @@ class Sampling:
 class ChatBackend(Protocol):
     name: str
 
-    def chat(self, conversations: Sequence[Sequence[Message]], sampling: Sampling) -> list[str]: ...
+    def chat(
+        self, conversations: Sequence[Sequence[Message]], sampling: Sampling, seeds: Sequence[int] | None = None
+    ) -> list[str]: ...
+
+
+def resolve_seeds(n: int, sampling: Sampling, seeds: Sequence[int] | None) -> list[int]:
+    """One seed per conversation: the given ones, or sampling.seed + index."""
+    if seeds is not None:
+        if len(seeds) != n:
+            raise ValueError(f"{len(seeds)} seeds for {n} conversations")
+        return list(seeds)
+    return [sampling.seed + i for i in range(n)]
 
 
 class VLLMBackend:
-    """vLLM offline inference; one engine per process. Each conversation gets the seed sampling.seed + its index,
-    so a rerun of the same batch samples the same text."""
+    """vLLM offline inference; one engine per process. Each conversation is sampled with its own seed, so a rerun
+    samples the same text."""
 
     def __init__(self, model: str, max_model_len: int = 4096, gpu_memory_utilization: float = 0.9, **kwargs: Any):
         vllm = require("vllm", "vllm", "extend")
@@ -43,15 +54,14 @@ class VLLMBackend:
             model=model, max_model_len=max_model_len, gpu_memory_utilization=gpu_memory_utilization, **kwargs
         )
 
-    def chat(self, conversations: Sequence[Sequence[Message]], sampling: Sampling) -> list[str]:
+    def chat(
+        self, conversations: Sequence[Sequence[Message]], sampling: Sampling, seeds: Sequence[int] | None = None
+    ) -> list[str]:
         params = [
             self._vllm.SamplingParams(
-                temperature=sampling.temperature,
-                top_p=sampling.top_p,
-                max_tokens=sampling.max_tokens,
-                seed=sampling.seed + i,
+                temperature=sampling.temperature, top_p=sampling.top_p, max_tokens=sampling.max_tokens, seed=seed
             )
-            for i in range(len(conversations))
+            for seed in resolve_seeds(len(conversations), sampling, seeds)
         ]
         outputs = self._llm.chat([list(c) for c in conversations], params, use_tqdm=False)
         return [output.outputs[0].text for output in outputs]
@@ -67,10 +77,12 @@ class TransformersBackend:
         self._tokenizer = transformers.AutoTokenizer.from_pretrained(model)
         self._model = transformers.AutoModelForCausalLM.from_pretrained(model, device_map="auto")
 
-    def chat(self, conversations: Sequence[Sequence[Message]], sampling: Sampling) -> list[str]:
+    def chat(
+        self, conversations: Sequence[Sequence[Message]], sampling: Sampling, seeds: Sequence[int] | None = None
+    ) -> list[str]:
         replies = []
-        for i, conversation in enumerate(conversations):
-            self._torch.manual_seed(sampling.seed + i)
+        for seed, conversation in zip(resolve_seeds(len(conversations), sampling, seeds), conversations, strict=True):
+            self._torch.manual_seed(seed)
             ids = self._tokenizer.apply_chat_template(
                 list(conversation), add_generation_prompt=True, return_tensors="pt"
             ).to(self._model.device)

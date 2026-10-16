@@ -53,6 +53,8 @@ detector = [
     "python-louvain>=0.16",
     "requests>=2.31",
 ]
+# Building the extended dataset (`hallumat extend`); the LLM stages also need vLLM on a GPU machine.
+extend = ["hallumat[detector]", "pyarrow>=14"]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -66,6 +68,7 @@ dev = [
     "networkx>=3.0",
     "python-louvain>=0.16",
     "requests>=2.31",
+    "pyarrow>=14",
     "pre-commit>=3",
 ]
 
@@ -126,6 +129,8 @@ module = [
     "wikipediaapi.*",
     "networkx.*",
     "community.*",
+    "vllm.*",
+    "pyarrow.*",
     "seaborn.*",
     "scipy.*",
     "sklearn.*",
