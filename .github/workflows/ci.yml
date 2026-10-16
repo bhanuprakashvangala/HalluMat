@@ -48,8 +48,12 @@ jobs:
       - run: pytest
 
   base-install:
-    # No extras and the pinned plotting stack: the analysis must reproduce every committed output byte for byte.
-    runs-on: ubuntu-latest
+    # No extras and the pinned plotting stack on the platform that drew the committed figures (Windows; text
+    # rendering differs on Linux): the analysis must reproduce every committed output byte for byte.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
