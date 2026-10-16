@@ -225,6 +225,13 @@ def test_select_dedupes_and_balances():
     assert select.choose(mp_pool, [], total=10, seed=1) == select.choose(mp_pool, [], total=10, seed=1)
 
 
+def test_strip_reasoning():
+    from hallumat.extend.llm import strip_reasoning
+
+    assert strip_reasoning("<think>\nhmm\n</think>\n\nGaN is hexagonal.") == "GaN is hexagonal."
+    assert strip_reasoning("  plain  ") == "plain"
+
+
 def test_resolve_seeds():
     assert resolve_seeds(3, Sampling(seed=10), None) == [10, 11, 12]
     assert resolve_seeds(2, Sampling(), [7, 8]) == [7, 8]
@@ -287,20 +294,20 @@ def test_pipeline_end_to_end(tmp_path: Path):
     assert stages.select_questions(work, lambda: KeywordEmbedder(["boron", "diamond"]), total=6) == 6
     assert stages.paraphrase_questions(work, writer) == 6
     assert len(list(read_jsonl(work / "phrasings.jsonl"))) == 30
-    assert stages.respond(work, "qwen2.5-7b", writer, shard_index=0, shard_count=2) == 15
-    assert stages.respond(work, "qwen2.5-7b", writer, shard_index=1, shard_count=2) == 15
+    assert stages.respond(work, "qwen3-8b", writer, shard_index=0, shard_count=2) == 15
+    assert stages.respond(work, "qwen3-8b", writer, shard_index=1, shard_count=2) == 15
 
     def embed(texts):
         return np.asarray([[len(t) % 7 + 1.0, 1.0] for t in texts], dtype=np.float32)
 
-    assert stages.label(work, "qwen2.5-7b", embed) == 30
+    assert stages.label(work, "qwen3-8b", embed) == 30
 
     from hallumat.extend.export import export
 
     out = tmp_path / "export"
     assert export(work, out) == 30
     table = pd.concat(pd.read_parquet(p) for p in sorted((out / "responses").glob("*.parquet")))
-    assert set(table["model"]) == {"qwen2.5-7b"}
+    assert set(table["model"]) == {"qwen3-8b"}
     assert table["phrasing"].value_counts().to_dict() == {i: 6 for i in range(5)}
     assert set(table["hallucination_level"]) <= {"Low", "Medium", "High"}
     qs = pd.read_parquet(out / "questions.parquet")

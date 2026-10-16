@@ -1,0 +1,13 @@
+# Work volume for the dataset extension (`hallumat extend`): sources, candidate questions, phrasings, answers,
+# labels and the exported tables. Model weights live in the shared bhanu-pickspin-hf-cache volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bhanu-hallumat-work
+  namespace: gp-engine-mizzou-radiant
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: rook-cephfs
+  resources:
+    requests:
+      storage: 50Gi

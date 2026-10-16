@@ -108,6 +108,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "PT", "T20"]
 # Only the command line and the tests may print; everything else logs or returns text.
 "src/hallumat/cli.py" = ["T20"]
 "tests/**" = ["T20"]
+"deploy/**" = ["T20"]
 # The rewording templates keep the original detector's typographic quotes.
 "src/hallumat/detector/config.py" = ["RUF001"]
 

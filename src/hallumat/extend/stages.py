@@ -28,13 +28,16 @@ log = logging.getLogger(__name__)
 RESPONDERS: Final = {
     "llama2-7b-chat": "meta-llama/Llama-2-7b-chat-hf",
     "llama3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
-    "qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct",
-    "gemma2-9b": "google/gemma-2-9b-it",
+    "qwen3-8b": "Qwen/Qwen3-8B",
+    "gemma3-12b": "google/gemma-3-12b-it",
 }
 """Answering models by short name. Llama-2-7B-chat is the model of the original HalluMat responses."""
 
-WRITER: Final = "Qwen/Qwen2.5-32B-Instruct-AWQ"
-"""Model that writes the Wikipedia questions and the paraphrases."""
+CHAT_TEMPLATE_KWARGS: Final = {"qwen3-8b": {"enable_thinking": False}}
+"""Chat-template options per answering model: Qwen3 answers directly, without a reasoning trace."""
+
+WRITER: Final = "Qwen/Qwen2.5-72B-Instruct-AWQ"
+"""Model that writes the Wikipedia questions and the paraphrases (two 48 GB GPUs)."""
 
 ANSWER_SAMPLING: Final = Sampling(temperature=0.7, top_p=0.9, max_tokens=256)
 WRITER_SAMPLING: Final = Sampling(temperature=0.7, top_p=0.9, max_tokens=1024)

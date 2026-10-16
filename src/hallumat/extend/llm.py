@@ -46,10 +46,18 @@ class VLLMBackend:
     """vLLM offline inference; one engine per process. Each conversation is sampled with its own seed, so a rerun
     samples the same text."""
 
-    def __init__(self, model: str, max_model_len: int = 4096, gpu_memory_utilization: float = 0.9, **kwargs: Any):
+    def __init__(
+        self,
+        model: str,
+        max_model_len: int = 4096,
+        gpu_memory_utilization: float = 0.9,
+        chat_template_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
         vllm = require("vllm", "vllm", "extend")
         self.name = model
         self._vllm = vllm
+        self._template_kwargs = chat_template_kwargs or {}
         self._llm = vllm.LLM(
             model=model, max_model_len=max_model_len, gpu_memory_utilization=gpu_memory_utilization, **kwargs
         )
@@ -63,8 +71,9 @@ class VLLMBackend:
             )
             for seed in resolve_seeds(len(conversations), sampling, seeds)
         ]
-        outputs = self._llm.chat([list(c) for c in conversations], params, use_tqdm=False)
-        return [output.outputs[0].text for output in outputs]
+        extra = {"chat_template_kwargs": self._template_kwargs} if self._template_kwargs else {}
+        outputs = self._llm.chat([list(c) for c in conversations], params, use_tqdm=False, **extra)
+        return [strip_reasoning(output.outputs[0].text) for output in outputs]
 
 
 class TransformersBackend:
@@ -96,6 +105,14 @@ class TransformersBackend:
             )
             replies.append(str(self._tokenizer.decode(out[0, ids.shape[1] :], skip_special_tokens=True)))
         return replies
+
+
+_THINK = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+
+
+def strip_reasoning(text: str) -> str:
+    """The reply without a <think>...</think> reasoning block, if a model emitted one."""
+    return _THINK.sub("", text).strip()
 
 
 def make_backend(model: str, engine: str = "vllm", **kwargs: Any) -> ChatBackend:

@@ -147,7 +147,12 @@ def _extend(args: argparse.Namespace) -> int:
         from hallumat.extend.llm import make_backend
 
         model = stages.RESPONDERS[args.model] if stage == "respond" else (args.writer or stages.WRITER)
-        backend = make_backend(model, engine=args.engine, max_model_len=args.max_model_len)
+        options: dict[str, object] = {"max_model_len": args.max_model_len}
+        if args.engine == "vllm":
+            options["tensor_parallel_size"] = args.tensor_parallel
+            if stage == "respond" and args.model in stages.CHAT_TEMPLATE_KWARGS:
+                options["chat_template_kwargs"] = stages.CHAT_TEMPLATE_KWARGS[args.model]
+        backend = make_backend(model, engine=args.engine, **options)
         shard_index, shard_count = args.shard
         if stage == "wiki-questions":
             count = stages.wiki_questions(work, backend, shard_index=shard_index, shard_count=shard_count)
@@ -251,6 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     extend.add_argument("--writer", help="model that writes questions and paraphrases (default Qwen2.5-32B AWQ)")
     extend.add_argument("--engine", choices=["vllm", "transformers"], default="vllm")
     extend.add_argument("--max-model-len", type=int, default=4096)
+    extend.add_argument("--tensor-parallel", type=int, default=1, help="GPUs per model (vLLM)")
     extend.add_argument("--shard", type=_shard, default=(0, 1), metavar="INDEX/COUNT", help="split a stage across jobs")
     extend.add_argument("--total", type=int, default=50_000, help="questions to select (select)")
     extend.add_argument("--depth", type=int, default=2, help="category depth (fetch-wiki)")
