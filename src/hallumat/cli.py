@@ -143,7 +143,7 @@ def _extend(args: argparse.Namespace) -> int:
             stages.WRITER,
             *stages.RESPONDERS.values(),
             "sentence-transformers/all-MiniLM-L6-v2",
-            "bert-base-uncased",
+            "google-bert/bert-base-uncased",
         ]:
             log.info("downloading %s", model)
             snapshot_download(model, allow_patterns=patterns)
