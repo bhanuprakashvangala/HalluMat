@@ -54,7 +54,7 @@ detector = [
     "requests>=2.31",
 ]
 # Building the extended dataset (`hallumat extend`); the LLM stages also need vLLM on a GPU machine.
-extend = ["hallumat[detector]", "pyarrow>=14"]
+extend = ["hallumat[detector]", "pyarrow>=14", "huggingface_hub>=0.23"]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -132,6 +132,7 @@ module = [
     "community.*",
     "vllm.*",
     "pyarrow.*",
+    "huggingface_hub.*",
     "seaborn.*",
     "scipy.*",
     "sklearn.*",
