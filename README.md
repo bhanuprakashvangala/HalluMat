@@ -7,39 +7,58 @@ AAAI 2025 Spring Symposium on AI for Engineering and Scientific Discoveries. [ar
 HalluMat is a benchmark of LLM answers to materials science questions, labelled by how much each answer hallucinates.
 Each question is asked in several paraphrased forms, so you can check both whether a model is wrong and whether it stays
 consistent when the question is reworded. The repository also has HalluMatDetector, which checks an answer with
-self-consistency, Wikipedia retrieval and a contradiction graph.
+self-consistency, retrieval-backed entailment and a fact graph.
 
 **Dataset:** [huggingface.co/datasets/bhanuprakashvangala/HalluMat](https://huggingface.co/datasets/bhanuprakashvangala/HalluMat) (a copy is in `data/`).
 
-## Layout
+## Install
 
-```
-data/        HalluMatData.csv and the per-question summary tables
-analysis/    dataset statistics and the paper's tables and figures
-detector/    response generation, labelling, and HalluMatDetector
-results/     outputs of the analysis scripts
-```
-
-## Setup
+Python 3.11 or later:
 
 ```bash
+git clone https://github.com/bhanuprakashvangala/HalluMat.git
+cd HalluMat
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+This installs the `hallumat` package and the `hallumat` command. The base install analyses the dataset; extras add
+the model-based parts:
+
+| Extra | Installs | Needed for |
+|---|---|---|
+| `models` | torch, transformers, accelerate, sentencepiece | `hallumat generate`, `hallumat label` |
+| `detector` | `models` plus sentence-transformers, faiss-cpu, rank-bm25, wikipedia-api, networkx, python-louvain, requests | `hallumat detect` |
+| `dev` | pytest, ruff, mypy, the detector's light dependencies, pre-commit | tests and checks |
+
+A command whose extra is missing stops with the `pip install` command that adds it.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `hallumat reproduce` | the whole dataset analysis: prints every table and writes `results/` (no GPU, a few seconds) |
+| `hallumat summary` | Table 1, the dataset composition |
+| `hallumat consistency` | PHCS and Table 2, the ANOVA across question groups and the Welch t-test |
+| `hallumat agreement` | agreement of the recomputed with the assigned hallucination levels |
+| `hallumat generate --questions Q.csv --out R.csv` | answers questions with Llama-2-7B-chat |
+| `hallumat label --responses R.csv --out L.csv` | labels responses by BERT similarity to the reference answer |
+| `hallumat detect "QUERY" [--plots DIR]` | runs HalluMatDetector on one question |
+
+Global options come before the command: `--root DIR` (the folder holding `data/` and `results/`, default `.`) and
+`-v`/`-vv` for more log output. Errors print one line, `hallumat: error: ...`, and exit with status 1.
 
 ## Reproduce the dataset statistics and figures
 
-No GPU needed; each script takes a few seconds.
-
 ```bash
-python analysis/dataset_summary.py      # Table 1: dataset composition
-python analysis/plots.py                # Table 2 (PHCS) and the level distribution figures
-python detector/agreement_metrics.py    # agreement between the assigned and recomputed levels
-python detector/confusion_matrix.py     # confusion matrix figure
+hallumat reproduce
 ```
 
-Figures go to `results/figures/` and metrics to `results/agreement_metrics.csv`.
+This prints Table 1, the ANOVA and t-test, the dataset overview, Table 2 and the agreement metrics, and writes
+`results/agreement_metrics.csv` and the four figures in `results/figures/`. The tables and the metrics are the same on
+every platform. The committed figures were drawn with matplotlib 3.10.8 and Pillow 11.3.0; to redraw them byte for byte,
+install with `pip install -c constraints/reproduce.txt -e .`.
 
 | | Count |
 |---|---|
@@ -61,13 +80,71 @@ The detector uses Llama-2-7B-chat, DeBERTa-v3 for NLI and MiniLM embeddings, so 
 [Llama 2 weights](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
 
 ```bash
-pip install -r requirements-detector.txt
+pip install -e ".[detector]"
 export HF_TOKEN=your_hugging_face_token
-python detector/hallu_mat_detector.py   # asks for a query, then prints the reliability score and graphs
+export SERPAPI_API_KEY=your_serpapi_key       # optional: adds Google Search and Google Scholar evidence
+hallumat detect "Which is more ductile, aluminium or alumina?" --plots results/detector
 ```
 
-To build responses for your own questions, put `Paraphrased_Questions.csv` (columns `Question, Answer, Explanation`)
-in `data/`, then run `detector/generate_responses.py` followed by `detector/label_responses.py`.
+It prints the answer, every intrinsic check, the evidence it used and the reliability score, groups the facts of the
+refined answer into communities, and with `--plots` saves the 3D and 2D fact graphs and a fact-similarity heatmap.
+Without `SERPAPI_API_KEY` it retrieves from Wikipedia only.
+
+From Python:
+
+```python
+from hallumat.detector import DetectorConfig, HalluMatDetector, format_report
+
+detector = HalluMatDetector.from_pretrained(DetectorConfig())
+report = detector.detect("Which is more ductile, aluminium or alumina?", seed=0)
+print(format_report(report))
+```
+
+Every model sits behind a small interface (`hallumat.detector.models`), so another LLM, NLI model or embedder can be
+passed to `HalluMatDetector(...)` directly. All weights and thresholds are fields of `DetectorConfig`.
+
+## Build responses for your own questions
+
+```bash
+pip install -e ".[models]"
+hallumat generate --questions my_questions.csv --out my_responses.csv   # columns Question, Answer, Explanation
+hallumat label --responses my_responses.csv --out my_labelled.csv
+```
+
+## Package layout
+
+```
+src/hallumat/
+  dataset.py          loading and validating HalluMatData.csv, the Low/Medium/High encodings
+  analysis/           composition (Table 1), consistency (PHCS, Table 2, ANOVA, t-test), agreement, figures, report
+  generation.py       response generation with a Hugging Face causal LM
+  labeling.py         BERT-similarity labels: above 0.8 Low, 0.5 to 0.8 Medium, below 0.5 High
+  detector/
+    config.py         models, weights and thresholds (DetectorConfig)
+    models.py         the LLM, NLI and embedding interfaces and their Hugging Face implementations
+    intrinsic.py      verification rounds, NLI confidence and entropy, self-refinement, contradiction checks
+    retrieval.py      query chunks, BM25 ranking, Wikipedia and SerpAPI sources, FAISS dense retrieval
+    extrinsic.py      NLI entailment against the retrieved evidence
+    scoring.py        the reliability score and its confidence level
+    graph.py          the fact graph and its Louvain communities
+    plots.py          fact-graph figures
+    pipeline.py       HalluMatDetector, DetectionReport
+  cli.py              the hallumat command
+data/                 HalluMatData.csv and the per-question summary tables
+results/              agreement_metrics.csv and figures/
+tests/                unit tests (fake models, no GPU) and the reproduction tests with their goldens
+```
+
+The scripts of the first release (`analysis/*.py`, `detector/*.py`) are at tag `v1.1.0`; see `CHANGELOG.md` for
+how each maps to a command.
+
+## Development
+
+```bash
+pip install -c constraints/reproduce.txt -e ".[dev]"
+pytest                 # about 15 seconds; no GPU or model download
+ruff check . && ruff format --check . && mypy
+```
 
 ## Related
 

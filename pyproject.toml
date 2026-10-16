@@ -1,0 +1,141 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hallumat"
+version = "2.0.0"
+description = "HalluMat: a materials-science hallucination benchmark and HalluMatDetector, a multi-stage hallucination detector"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Bhanu Prakash Vangala" },
+    { name = "Sajid Mahmud" },
+    { name = "Pawan Neupane" },
+    { name = "Joel Selvaraj" },
+    { name = "Jianlin Cheng" },
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+# The base install runs the dataset analysis: `hallumat reproduce`, `summary`, `consistency` and `agreement`.
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+# Hugging Face models: `hallumat generate` (Llama-2) and `hallumat label` (BERT similarity).
+models = ["torch>=2.1", "transformers>=4.40", "accelerate>=0.26", "sentencepiece", "protobuf"]
+# HalluMatDetector: `hallumat detect`.
+detector = [
+    "hallumat[models]",
+    "sentence-transformers>=2.2",
+    "faiss-cpu>=1.7",
+    "rank-bm25>=0.2",
+    "wikipedia-api>=0.6",
+    "networkx>=3.0",
+    "python-louvain>=0.16",
+    "requests>=2.31",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pandas-stubs",
+    "types-requests",
+    "types-tabulate",
+    # The detector's light dependencies, so its tests run without torch.
+    "faiss-cpu>=1.7",
+    "rank-bm25>=0.2",
+    "networkx>=3.0",
+    "python-louvain>=0.16",
+    "requests>=2.31",
+    "pre-commit>=3",
+]
+
+[project.scripts]
+hallumat = "hallumat.cli:main"
+
+[project.urls]
+Paper = "https://arxiv.org/abs/2512.22396"
+Dataset = "https://huggingface.co/datasets/bhanuprakashvangala/HalluMat"
+Repository = "https://github.com/bhanuprakashvangala/HalluMat"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hallumat"]
+
+[tool.hatch.build.targets.sdist]
+# data/ and results/ never ship; the dataset is on Hugging Face.
+only-include = [
+    "src",
+    "tests",
+    "constraints",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "PT", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+# Only the command line and the tests may print; everything else logs or returns text.
+"src/hallumat/cli.py" = ["T20"]
+"tests/**" = ["T20"]
+# The rewording templates keep the original detector's typographic quotes.
+"src/hallumat/detector/config.py" = ["RUF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["hallumat"]
+
+[tool.mypy]
+files = ["src/hallumat"]
+python_version = "3.11"
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "torch.*",
+    "transformers.*",
+    "sentence_transformers.*",
+    "faiss.*",
+    "rank_bm25.*",
+    "wikipediaapi.*",
+    "networkx.*",
+    "community.*",
+    "seaborn.*",
+    "scipy.*",
+    "sklearn.*",
+    "matplotlib.*",
+    "mpl_toolkits.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --import-mode=importlib"
+# tests/fakes.py and tests/conftest.py are imported as tests.*
+pythonpath = ["."]

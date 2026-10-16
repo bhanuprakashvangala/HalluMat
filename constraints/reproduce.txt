@@ -1,0 +1,9 @@
+# The plotting stack that wrote the committed results/figures:
+#     pip install -c constraints/reproduce.txt -e .
+# With it, `hallumat reproduce` rewrites the four PNGs byte for byte (tests/golden/figures.sha256).
+# Newer matplotlib or Pillow releases draw slightly different pixels; the tables do not change.
+numpy==2.0.2
+matplotlib==3.10.8
+pillow==11.3.0
+seaborn==0.13.2
+pandas==2.3.3
